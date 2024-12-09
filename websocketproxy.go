@@ -26,12 +26,6 @@ var (
 	DefaultDialer = websocket.DefaultDialer
 )
 
-const (
-	PongWait = 30 * time.Second
-
-	PingPeriod = (PongWait * 8) / 10
-)
-
 // WebsocketProxy is an HTTP Handler that takes an incoming WebSocket
 // connection and proxies it to another server.
 type WebsocketProxy struct {
@@ -52,6 +46,11 @@ type WebsocketProxy struct {
 	//  Dialer contains options for connecting to the backend WebSocket server.
 	//  If nil, DefaultDialer is used.
 	Dialer *websocket.Dialer
+
+	// IdleWait dictates how long the proxy waits without receiving any message
+	// before sending a PING to both the client and the server.
+	// If nil, it won't send a PING regardless of idle time.
+	IdleWait *time.Duration
 }
 
 // ProxyHandler returns a new http.Handler interface that reverse proxies the
@@ -185,15 +184,18 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	errClient := make(chan error, 1)
 	errBackend := make(chan error, 1)
 	replicateWebsocketConn := func(dst, src *websocket.Conn, errc chan error) {
-		done := make(chan struct{})
-		defer close(done)
+		resetPing := make(chan struct{}, 1)
 
-		reset := make(chan struct{}, 1)
-		go ping(src, reset, done)
+		if w.IdleWait != nil && w.IdleWait.Seconds() > 0 {
+			done := make(chan struct{})
+			defer close(done)
+	
+			go ping(src, *w.IdleWait, resetPing, done)
+		}
 
 		for {
 			msgType, msg, err := src.ReadMessage()
-			reset <- struct{}{}
+			resetPing <- struct{}{}
 
 			if err != nil {
 				m := websocket.FormatCloseMessage(websocket.CloseNormalClosure, fmt.Sprintf("%v", err))
@@ -230,13 +232,15 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func ping(ws *websocket.Conn, reset chan struct{}, done chan struct{}) {
-	ticker := time.NewTicker(PingPeriod)
+func ping(ws *websocket.Conn, idleTimeout time.Duration, reset chan struct{}, done chan struct{}) {
+	pingFrequency := (idleTimeout * 9) / 10
+
+	ticker := time.NewTicker(pingFrequency)
 	defer ticker.Stop()
 
-	ws.SetReadDeadline(time.Now().Add(PongWait))
+	ws.SetReadDeadline(time.Now().Add(idleTimeout))
 	ws.SetPongHandler(func(string) error {
-		ws.SetReadDeadline(time.Now().Add(PongWait))
+		ws.SetReadDeadline(time.Now().Add(idleTimeout))
 		return nil
 	})
 
@@ -247,8 +251,8 @@ func ping(ws *websocket.Conn, reset chan struct{}, done chan struct{}) {
 				log.Println("Error writing PING:", err)
 			}
 		case <-reset:
-			ws.SetReadDeadline(time.Now().Add(PongWait))
-			ticker.Reset(PingPeriod)
+			ws.SetReadDeadline(time.Now().Add(idleTimeout))
+			ticker.Reset(pingFrequency)
 		case <-done:
 			return
 		}
