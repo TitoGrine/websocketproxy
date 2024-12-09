@@ -9,7 +9,7 @@ into your existing Go webserver to provide WebSocket reverse proxy.
 ## Install
 
 ```bash
-go get github.com/koding/websocketproxy
+go get github.com/TitoGrine/websocketproxy
 ```
 
 ## Example
@@ -24,7 +24,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/koding/websocketproxy"
+	"github.com/TitoGrine/websocketproxy"
 )
 
 var (
