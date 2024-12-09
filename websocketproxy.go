@@ -195,7 +195,12 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 		for {
 			msgType, msg, err := src.ReadMessage()
-			resetPing <- struct{}{}
+
+			select {
+			case resetPing <- struct{}{}:
+			// If the buffer is full or no one is listening, just ignore
+			default:
+			}
 
 			if err != nil {
 				m := websocket.FormatCloseMessage(websocket.CloseNormalClosure, fmt.Sprintf("%v", err))

@@ -131,4 +131,23 @@ func TestProxy(t *testing.T) {
 	if msg != string(p) {
 		t.Errorf("expecting: %s, got: %s", msg, string(p))
 	}
+
+	msg = "hello kite 2"
+	err = conn.WriteMessage(websocket.TextMessage, []byte(msg))
+	if err != nil {
+		t.Error(err)
+	}
+
+	messageType, p, err = conn.ReadMessage()
+	if err != nil {
+		t.Error(err)
+	}
+
+	if messageType != websocket.TextMessage {
+		t.Error("incoming message type is not Text")
+	}
+
+	if msg != string(p) {
+		t.Errorf("expecting: %s, got: %s", msg, string(p))
+	}
 }
