@@ -46,7 +46,7 @@ func TestProxy(t *testing.T) {
 		mux2 := http.NewServeMux()
 		mux2.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			// Don't upgrade if original host header isn't preserved
-			if r.Host !=  "127.0.0.1:7777" {
+			if r.Host != "127.0.0.1:7777" {
 				log.Printf("Host header set incorrectly.  Expecting 127.0.0.1:7777 got %s", r.Host)
 				return
 			}
@@ -57,13 +57,15 @@ func TestProxy(t *testing.T) {
 				return
 			}
 
-			messageType, p, err := conn.ReadMessage()
-			if err != nil {
-				return
-			}
+			for {
+				messageType, p, err := conn.ReadMessage()
+				if err != nil {
+					return
+				}
 
-			if err = conn.WriteMessage(messageType, p); err != nil {
-				return
+				if err = conn.WriteMessage(messageType, p); err != nil {
+					return
+				}
 			}
 		})
 
@@ -89,6 +91,8 @@ func TestProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	conn.SetPingHandler(nil)
+
 	// check if the server really accepted only the first one
 	in := func(desired string) bool {
 		for _, prot := range resp.Header[http.CanonicalHeaderKey("Sec-WebSocket-Protocol")] {
@@ -107,7 +111,7 @@ func TestProxy(t *testing.T) {
 		t.Error("test-notsupported should be not recevied from the server.")
 	}
 
-	// now write a message and send it to the backend server (which goes trough
+	// now write a message and send it to the backend server (which goes through
 	// proxy..)
 	msg := "hello kite"
 	err = conn.WriteMessage(websocket.TextMessage, []byte(msg))

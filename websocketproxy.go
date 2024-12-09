@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -23,6 +24,12 @@ var (
 
 	// DefaultDialer is a dialer with all fields set to the default zero values.
 	DefaultDialer = websocket.DefaultDialer
+)
+
+const (
+	PongWait = 10 * time.Second
+
+	PingPeriod = (PongWait * 8) / 10
 )
 
 // WebsocketProxy is an HTTP Handler that takes an incoming WebSocket
@@ -178,8 +185,22 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	errClient := make(chan error, 1)
 	errBackend := make(chan error, 1)
 	replicateWebsocketConn := func(dst, src *websocket.Conn, errc chan error) {
+		done := make(chan struct{})
+		defer close(done)
+
+		reset := make(chan struct{}, 1)
+		go ping(src, reset, done)
+
+		src.SetReadDeadline(time.Now().Add(PongWait))
+		src.SetPongHandler(func(string) error {
+			src.SetReadDeadline(time.Now().Add(PongWait))
+			return nil
+		})
+
 		for {
 			msgType, msg, err := src.ReadMessage()
+			reset <- struct{}{}
+
 			if err != nil {
 				m := websocket.FormatCloseMessage(websocket.CloseNormalClosure, fmt.Sprintf("%v", err))
 				if e, ok := err.(*websocket.CloseError); ok {
@@ -212,6 +233,23 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 	if e, ok := err.(*websocket.CloseError); !ok || e.Code == websocket.CloseAbnormalClosure {
 		log.Printf(message, err)
+	}
+}
+
+func ping(ws *websocket.Conn, reset chan struct{}, done chan struct{}) {
+	ticker := time.NewTicker(PingPeriod)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if err := ws.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+				log.Println("Error writing PING:", err)
+			}
+		case <-reset:
+			ticker.Reset(PingPeriod)
+		case <-done:
+			return
+		}
 	}
 }
 
