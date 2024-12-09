@@ -1,4 +1,6 @@
-# WebsocketProxy [![GoDoc](https://godoc.org/github.com/koding/websocketproxy?status.svg)](https://godoc.org/github.com/koding/websocketproxy) [![Build Status](https://travis-ci.org/koding/websocketproxy.svg)](https://travis-ci.org/koding/websocketproxy)
+# WebsocketProxy [![GoDoc](https://godoc.org/github.com/TitoGrine/websocketproxy?status.svg)](https://godoc.org/github.com/TitoGrine/websocketproxy)
+
+**This is a fork of [koding/websocketproxy](https://github.com/koding/websocketproxy)**
 
 WebsocketProxy is an http.Handler interface build on top of
 [gorilla/websocket](https://github.com/gorilla/websocket) that you can plug
