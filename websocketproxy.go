@@ -27,7 +27,7 @@ var (
 )
 
 const (
-	PongWait = 10 * time.Second
+	PongWait = 30 * time.Second
 
 	PingPeriod = (PongWait * 8) / 10
 )
@@ -191,12 +191,6 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		reset := make(chan struct{}, 1)
 		go ping(src, reset, done)
 
-		src.SetReadDeadline(time.Now().Add(PongWait))
-		src.SetPongHandler(func(string) error {
-			src.SetReadDeadline(time.Now().Add(PongWait))
-			return nil
-		})
-
 		for {
 			msgType, msg, err := src.ReadMessage()
 			reset <- struct{}{}
@@ -239,6 +233,13 @@ func (w *WebsocketProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 func ping(ws *websocket.Conn, reset chan struct{}, done chan struct{}) {
 	ticker := time.NewTicker(PingPeriod)
 	defer ticker.Stop()
+
+	ws.SetReadDeadline(time.Now().Add(PongWait))
+	ws.SetPongHandler(func(string) error {
+		ws.SetReadDeadline(time.Now().Add(PongWait))
+		return nil
+	})
+
 	for {
 		select {
 		case <-ticker.C:
@@ -246,6 +247,7 @@ func ping(ws *websocket.Conn, reset chan struct{}, done chan struct{}) {
 				log.Println("Error writing PING:", err)
 			}
 		case <-reset:
+			ws.SetReadDeadline(time.Now().Add(PongWait))
 			ticker.Reset(PingPeriod)
 		case <-done:
 			return
